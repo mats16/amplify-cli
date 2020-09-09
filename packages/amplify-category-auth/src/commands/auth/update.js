@@ -31,6 +31,8 @@ module.exports = {
       }
     }
 
+    //IMPORT add imported resource detection and return early
+
     context.print.info('Please note that certain attributes may not be overwritten if you choose to use defaults settings.');
 
     const meta = amplify.getProjectDetails().amplifyMeta;

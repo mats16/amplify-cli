@@ -1,9 +1,12 @@
+import { ServiceSelection } from './serviceSelection';
+
 export * from './cliContext';
 export * from './cliContextEnvironmentProvider';
 export * from './cliEnvironmentProvider';
 export * from './feature-flags';
 export * from './jsonUtilities';
 export * from './jsonValidationError';
+export * from './serviceSelection';
 export * from './state-manager';
 export * from './tags';
 export * from './errors';
@@ -79,7 +82,12 @@ interface AmplifyToolkit {
   showHelp: () => $TSAny;
   showHelpfulProviderLinks: () => $TSAny;
   showResourceTable: () => $TSAny;
-  serviceSelectionPrompt: () => $TSAny;
+  serviceSelectionPrompt: (
+    context: $TSContext,
+    category: string,
+    servicesMetadata: $TSAny,
+    customQuestion?: $TSAny,
+  ) => Promise<ServiceSelection>;
   updateProjectConfig: () => $TSAny;
   updateamplifyMetaAfterResourceUpdate: () => $TSAny;
   updateamplifyMetaAfterResourceAdd: () => $TSAny;

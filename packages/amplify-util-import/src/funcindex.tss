@@ -1,0 +1,164 @@
+import { $TSAny } from 'amplify-cli-core';
+// import { Cognito } from 'amplify-provider-awscloudformation';
+
+// Cognito.
+// export const a = 0;
+
+import assert from 'assert';
+import { CognitoIdentityServiceProvider, CognitoIdentity } from 'aws-sdk';
+// import { prompt } from 'enquirer';
+
+// const p = require('amplify-provider-awscloudformation');
+
+/*
+
+List userpools, filter based on partialName on userpool id and name
+ValidateRequirements
+- app clients (1 web, 1 native)
+Lookup IDP
+- List idps, describe all idps, check providers for idps to match a given userpool
+Create
+
+*/
+
+
+const main = async () => {
+  const cognito = new CognitoIdentityServiceProvider();
+  const cognitoIdentity = new CognitoIdentity();
+
+  // const userPools = await listUserPools(cognito);
+  // const userPoolChoices = userPools.map(u => ({
+  //   id: u.id,
+  //   name: `${u.name} - ${u.id}`,
+  // }));
+
+  // const answer = await prompt({
+  //   type: 'autocomplete',
+  //   name: 'userPool',
+  //   message: 'Select a Cognito User Pool`',
+  //   limit: 3,
+  //   initial: 0,
+  //   footer: () => '(Type in a partial name or scroll up and down to reveal more choices)',
+  //   choices: userPoolChoices,
+  // });
+  // console.log(answer);
+
+  // const userPoolId = userPools[0].id;
+
+  // const selectedUserPoolDetails = await getUserPoolDetails(cognito, {
+  //   userPoolId
+  // });
+  // console.log(selectedUserPoolDetails);
+
+  // const userPoolIdentityProviders = await listUserPoolIdentityProviders(cognito, {
+  //   userPoolId
+  // });
+  // console.log(userPoolIdentityProviders);
+
+  // const userPoolClients = await listUserPoolClients(cognito, {
+  //   userPoolId
+  // });
+  // console.log(userPoolClients);
+
+  // const identityPools = await listIdentityPools(cognitoIdentity);
+  // console.log(identityPools);
+
+  // const identityPoolDetails = await listIdentityPoolDetails(cognitoIdentity);
+
+  // console.log(identityPoolDetails);
+
+  // const supportedProviderTypes = ['Facebook', 'Google', 'LoginWithAmazon'];
+
+  // TODO
+  // customAuthConfigured =
+  // triggers.DefineAuthChallenge &&
+  // triggers.DefineAuthChallenge.length > 0 &&
+  // triggers.CreateAuthChallenge &&
+  // triggers.CreateAuthChallenge.length > 0 &&
+  // triggers.VerifyAuthChallengeResponse &&
+  // triggers.VerifyAuthChallengeResponse.length > 0;
+  // Androidnal: Default: authenticationFlowType: "CUSTOM_AUTH" vagy "USER_SRP_AUTH"
+
+  // const output = {
+  //   id: userPool.Id,
+  //   name: userPool.Name,
+  //   output: {
+  //     region: '',
+  //     identityPoolId: '',
+  //     domain: details.Domain,
+  //     customDomain: details.CustomDomain,
+  //     createdSNSRole: details.SmsConfiguration.SnsCallerArn,
+  //     identityProviders: idpsd
+  //       .filter(idp => supportedProviderTypes.includes(idp.ProviderType))
+  //       .map(idp => {
+  //       return {
+  //         name: idp.ProviderName,
+  //         type: idp.ProviderType,
+  //         clientId: idp.ProviderDetails.client_id,
+  //         clientSecret: idp.ProviderDetails.client_secret
+  //       };
+  //     }),
+  //     clients: clients
+  //       .map(client => {
+  //         return {
+  //           clientId: client.ClientId,
+  //           clientName: client.ClientName,
+  //           clientSecret: client.ClientSecret,
+  //           allowedOAuthFlows: client.AllowedOAuthFlows,
+  //           allowedOAuthFlowsUserPoolClient: client.AllowedOAuthFlowsUserPoolClient,
+  //           allowedOAuthScopes: client.AllowedOAuthScopes,
+  //           callbackURLs: client.CallbackURLs,
+  //           logoutURLs: client.LogoutURLs,
+  //           supportedIdentityProviders: client.SupportedIdentityProviders,
+  //         };
+  //     }),
+  //   },
+  // };
+
+  // console.log(JSON.stringify(output, null, 2));
+
+  // const idpools = await Promise.all(ir1.IdentityPools.map(async idp => await identityPool.describeIdentityPool({
+  //   IdentityPoolId: idp.IdentityPoolId
+  // }).promise()));
+
+  // console.log(JSON.stringify(idpools, null, 2));
+};
+
+main();
+
+/*
+
+    aws_cognito_identity_pool_id: cognitoResource.output.IdentityPoolId,
+    aws_cognito_region: projectRegion,
+    aws_user_pools_id: cognitoResource.output.UserPoolId,
+    aws_user_pools_web_client_id: cognitoResource.output.AppClientIDWeb,
+    oauth,
+    federationTarget,
+
+                    HostedUIDomain
+
+OAuthMetadata {
+  AllowedOAuthScopes
+  CallbackURLs
+  LogoutURLs
+  AllowedOAuthFlows
+}
+
+GoogleWebClient {
+}
+FacebookWebClient {
+}
+AmazonWebClient {
+}
+GoogleIOSClient {
+}
+
+IdentityPoolId
+                    region()
+                    UserPoolId
+AppClientIDWeb
+
+AppClientID
+AppClientSecret
+
+*/

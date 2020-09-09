@@ -93,7 +93,7 @@ async function updateConfigOnEnvInit(context, category, service) {
   return envParams;
 }
 
-async function migrate(context) {
+export async function migrate(context) {
   const category = 'auth';
   const { amplify } = context;
   const existingAuth = context.migrationInfo.amplifyMeta.auth || {};
@@ -114,6 +114,97 @@ async function migrate(context) {
   });
   await copyCfnTemplate(context, category, props, cfnFilename);
   saveResourceParameters(context, provider, category, resourceName, { ...roles, ...props }, ENV_SPECIFIC_PARAMS);
+}
+
+export async function console(context, amplifyMeta) {
+  const cognitoOutput = getCognitoOutput(amplifyMeta);
+  if (cognitoOutput) {
+    const { Region } = amplifyMeta.providers.awscloudformation;
+    if (cognitoOutput.UserPoolId && cognitoOutput.IdentityPoolId) {
+      const answer = await inquirer.prompt({
+        name: 'selection',
+        type: 'list',
+        message: 'Which console',
+        choices: ['User Pool', 'Identity Pool', 'Both'],
+        default: 'Both',
+      });
+
+      switch (answer.selection) {
+        case 'User Pool':
+          await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
+          break;
+        case 'Identity Pool':
+          await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
+          break;
+        default:
+          await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
+          await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
+          break;
+      }
+    } else if (cognitoOutput.UserPoolId) {
+      await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
+    } else {
+      await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
+    }
+    context.print.info('');
+  } else {
+    context.print.error('Amazon Cognito resources have NOT been created for your project.');
+  }
+}
+
+export function getPermissionPolicies(context, service, resourceName, crudOptions) {
+  const serviceMetadata = require('../supported-services').supportedServices[service];
+  const { serviceWalkthroughFilename } = serviceMetadata;
+  const serviceWalkthroughSrc = `${__dirname}/service-walkthroughs/${serviceWalkthroughFilename}`;
+  const { getIAMPolicies } = require(serviceWalkthroughSrc);
+
+  if (!getPermissionPolicies) {
+    context.print.info(`No policies found for ${resourceName}`);
+    return;
+  }
+
+  return getIAMPolicies(resourceName, crudOptions);
+}
+
+function serviceQuestions(context, defaultValuesFilename, stringMapFilename, serviceWalkthroughFilename, serviceMetadata) {
+  const serviceWalkthroughSrc = `${__dirname}/service-walkthroughs/${serviceWalkthroughFilename}`;
+  const { serviceWalkthrough } = require(serviceWalkthroughSrc);
+  return serviceWalkthrough(context, defaultValuesFilename, stringMapFilename, serviceMetadata);
+}
+
+// may be able to consolidate this into just createUserPoolGroups
+async function updateUserPoolGroups(context, resourceName, userPoolGroupList) {
+  if (userPoolGroupList && userPoolGroupList.length > 0) {
+    const userPoolGroupPrecedenceList = [];
+
+    for (let i = 0; i < userPoolGroupList.length; i += 1) {
+      userPoolGroupPrecedenceList.push({
+        groupName: userPoolGroupList[i],
+        precedence: i + 1,
+      });
+    }
+
+    const userPoolGroupFile = path.join(
+      context.amplify.pathManager.getBackendDirPath(),
+      'auth',
+      'userPoolGroups',
+      'user-pool-group-precedence.json',
+    );
+
+    fs.outputFileSync(userPoolGroupFile, JSON.stringify(userPoolGroupPrecedenceList, null, 4));
+
+    context.amplify.updateamplifyMetaAfterResourceUpdate('auth', 'userPoolGroups', {
+      service: 'Cognito-UserPool-Groups',
+      providerPlugin: 'awscloudformation',
+      dependsOn: [
+        {
+          category: 'auth',
+          resourceName,
+          attributes: ['UserPoolId', 'AppClientIDWeb', 'AppClientID', 'IdentityPoolId'],
+        },
+      ],
+    });
+  }
 }
 
 function isInHeadlessMode(context) {
@@ -212,42 +303,6 @@ function getRequiredParamsForHeadlessInit(projectType, previousValues) {
     }
   }
   return requiredParams;
-}
-
-async function console(context, amplifyMeta) {
-  const cognitoOutput = getCognitoOutput(amplifyMeta);
-  if (cognitoOutput) {
-    const { Region } = amplifyMeta.providers.awscloudformation;
-    if (cognitoOutput.UserPoolId && cognitoOutput.IdentityPoolId) {
-      const answer = await inquirer.prompt({
-        name: 'selection',
-        type: 'list',
-        message: 'Which console',
-        choices: ['User Pool', 'Identity Pool', 'Both'],
-        default: 'Both',
-      });
-
-      switch (answer.selection) {
-        case 'User Pool':
-          await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
-          break;
-        case 'Identity Pool':
-          await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
-          break;
-        default:
-          await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
-          await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
-          break;
-      }
-    } else if (cognitoOutput.UserPoolId) {
-      await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
-    } else {
-      await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
-    }
-    context.print.info('');
-  } else {
-    context.print.error('Amazon Cognito resources have NOT been created for your project.');
-  }
 }
 
 function getCognitoOutput(amplifyMeta) {

@@ -15,8 +15,8 @@ export const getPostAddAuthMetaUpdater = (context: any, resultMetadata: { servic
     service: resultMetadata.service,
     providerPlugin: resultMetadata.providerName,
   };
-  const resourceDirPath = path.join(context.amplify.pathManager.getBackendDirPath(), 'auth', resourceName, 'parameters.json');
-  const authParameters = JSONUtilities.readJson<{ dependsOn: any[]; triggers: string; identityPoolName: string }>(resourceDirPath)!;
+  const parametersJSONPath = path.join(context.amplify.pathManager.getBackendDirPath(), 'auth', resourceName, 'parameters.json');
+  const authParameters = JSONUtilities.readJson<{ dependsOn: any[]; triggers: string; identityPoolName: string }>(parametersJSONPath)!;
 
   if (authParameters.dependsOn) {
     options.dependsOn = authParameters.dependsOn;
