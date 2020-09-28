@@ -13,7 +13,10 @@ const stripAnsi = require('strip-ansi');
 const { engines } = require('../package.json');
 
 const npm = /^win/.test(process.platform) ? 'npm.cmd' : 'npm';
-const amplify = /^win/.test(process.platform) ? 'amplify.cmd' : 'amplify';
+let amplify = /^win/.test(process.platform) ? 'amplify.cmd' : 'amplify-dev';
+if (process.env.AMPLIFY_DEV === 'true') {
+  amplify = /^win/.test(process.platform) ? 'amplify-dev.cmd' : 'amplify-dev';
+}
 const amplifyCliPackageName = '@aws-amplify/cli';
 
 function run() {
@@ -467,4 +470,4 @@ async function showIOSHelpText() {
   console.log('');
 }
 
-module.exports = { run };
+module.exports = { run, createAmplifySkeletonProject };
