@@ -69,7 +69,7 @@ interface AmplifyToolkit {
   listCategories: () => $TSAny;
   makeId: () => $TSAny;
   openEditor: () => $TSAny;
-  onCategoryOutputsChange: (context: $TSContext, amplifyMeta: $TSMeta) => $TSAny;
+  onCategoryOutputsChange: (context: $TSContext, currentAmplifyMeta: $TSMeta | undefined, amplifyMeta?: $TSMeta) => $TSAny;
   pathManager: () => $TSAny;
   pressEnterToContinue: () => $TSAny;
   pushResources: () => $TSAny;
@@ -90,17 +90,22 @@ interface AmplifyToolkit {
   ) => Promise<ServiceSelection>;
   updateProjectConfig: () => $TSAny;
   updateamplifyMetaAfterResourceUpdate: () => $TSAny;
-  updateamplifyMetaAfterResourceAdd: () => $TSAny;
+  updateamplifyMetaAfterResourceAdd: (
+    category: string,
+    resourceName: string,
+    metaResourceData: $TSAny,
+    backendResourceData?: $TSAny,
+  ) => $TSAny;
   updateamplifyMetaAfterResourceDelete: () => $TSAny;
   updateProvideramplifyMeta: () => $TSAny;
   updateamplifyMetaAfterPush: () => $TSAny;
   updateamplifyMetaAfterBuild: () => $TSAny;
   updateAmplifyMetaAfterPackage: () => $TSAny;
-  updateBackendConfigAfterResourceAdd: () => $TSAny;
+  updateBackendConfigAfterResourceAdd: (category: string, resourceName: string, resourceData: $TSAny) => $TSAny;
   updateBackendConfigAfterResourceUpdate: () => $TSAny;
   updateBackendConfigAfterResourceRemove: () => $TSAny;
   loadEnvResourceParameters: () => $TSAny;
-  saveEnvResourceParameters: () => $TSAny;
+  saveEnvResourceParameters: (context: $TSContext, category: string, resourceName: string, envSpecificParams: $TSObject) => $TSAny;
   removeResourceParameters: () => $TSAny;
   triggerFlow: () => $TSAny;
   addTrigger: () => $TSAny;

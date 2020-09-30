@@ -1168,7 +1168,7 @@ export const supportedServices = {
     cfnFilename: 'auth-template.yml.ejs',
     defaultValuesFilename: 'cognito-defaults.js',
     serviceWalkthroughFilename: 'auth-questions.js',
-    stringMapFilename: 'string-maps.js',
+    stringMapsFilename: 'string-maps.js',
     provider: 'awscloudformation',
   },
 };

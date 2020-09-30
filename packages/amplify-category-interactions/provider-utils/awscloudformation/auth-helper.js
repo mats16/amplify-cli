@@ -3,7 +3,7 @@ const { checkRequirements, externalAuthEnable } = require('amplify-category-auth
 
 async function ensureAuth(context) {
   const interactionsRequirements = { authSelections: 'identityPoolOnly', allowUnauthenticatedIdentities: true };
-  const satisfiedRequirements = await checkRequirements(interactionsRequirements, context);
+  const satisfiedRequirements = await checkRequirements(interactionsRequirements, context, 'interactions');
   const foundUnmetRequirements = Object.values(satisfiedRequirements).includes(false);
 
   if (foundUnmetRequirements) {

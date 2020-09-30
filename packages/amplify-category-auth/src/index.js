@@ -119,6 +119,7 @@ async function externalAuthEnable(context, externalCategory, resourceName, requi
     if (!authExists) {
       const options = {
         service: 'Cognito',
+        serviceType: 'managed',
         providerPlugin: 'awscloudformation',
       };
 
@@ -157,7 +158,7 @@ async function externalAuthEnable(context, externalCategory, resourceName, requi
   }
 }
 
-async function checkRequirements(requirements, context) {
+async function checkRequirements(requirements, context, category, targetResourceName) {
   if (!requirements || !requirements.authSelections) {
     const error = "Your plugin has not properly defined it's Cognito requirements.";
     context.print.error(error);
@@ -176,6 +177,18 @@ async function checkRequirements(requirements, context) {
 
   if (existingAuth && Object.keys(existingAuth).length > 0) {
     const authResourceName = await getAuthResourceName(context);
+    const authResource = existingAuth[authResourceName];
+
+    //TODO revisit this check once IdentityPool support is added to auth import
+    if (authResource.serviceType === 'imported') {
+      const error = new Error(
+        `Imported auth resources cannot be used together with '${category}' category's authenticated and unauthenticated access.`,
+      );
+      error.stack = undefined;
+
+      throw error;
+    }
+
     const resourceDirPath = path.join(amplify.pathManager.getBackendDirPath(), 'auth', authResourceName, 'parameters.json');
     authParameters = amplify.readJsonFile(resourceDirPath);
   } else {
@@ -198,27 +211,43 @@ async function checkRequirements(requirements, context) {
 
 async function initEnv(context) {
   const { amplify } = context;
-  const { resourcesToBeCreated, resourcesToBeDeleted, resourcesToBeUpdated, allResources } = await amplify.getResourceStatus('auth');
+  const {
+    resourcesToBeCreated,
+    resourcesToBeUpdated,
+    resourcesToBeSynced,
+    resourcesToBeDeleted,
+    allResources,
+  } = await amplify.getResourceStatus('auth');
   const isPulling = context.input.command === 'pull' || (context.input.command === 'env' && context.input.subCommands[0] === 'pull');
   let toBeCreated = [];
-  let toBeDeleted = [];
   let toBeUpdated = [];
+  let toBeSynced = [];
+  let toBeDeleted = [];
 
   if (resourcesToBeCreated && resourcesToBeCreated.length > 0) {
     toBeCreated = resourcesToBeCreated.filter(a => a.category === 'auth');
   }
-  if (resourcesToBeDeleted && resourcesToBeDeleted.length > 0) {
-    toBeDeleted = resourcesToBeDeleted.filter(b => b.category === 'auth');
-  }
   if (resourcesToBeUpdated && resourcesToBeUpdated.length > 0) {
     toBeUpdated = resourcesToBeUpdated.filter(c => c.category === 'auth');
+  }
+  if (resourcesToBeSynced && resourcesToBeSynced.length > 0) {
+    toBeSynced = resourcesToBeSynced.filter(b => b.category === 'auth');
+  }
+  if (resourcesToBeDeleted && resourcesToBeDeleted.length > 0) {
+    toBeDeleted = resourcesToBeDeleted.filter(b => b.category === 'auth');
   }
 
   toBeDeleted.forEach(authResource => {
     amplify.removeResourceParameters(context, 'auth', authResource.resourceName);
   });
 
-  const tasks = toBeCreated.concat(toBeUpdated);
+  toBeSynced
+    .filter(authResource => authResource.sync === 'unlink')
+    .forEach(authResource => {
+      amplify.removeResourceParameters(context, 'auth', authResource.resourceName);
+    });
+
+  const tasks = toBeCreated.concat(toBeUpdated).concat(toBeSynced);
   // check if this initialization is happening on a pull
   if (isPulling && allResources.length > 0) {
     tasks.push(...allResources);

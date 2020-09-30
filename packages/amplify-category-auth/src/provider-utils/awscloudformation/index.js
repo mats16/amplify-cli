@@ -1,43 +1,88 @@
 const inquirer = require('inquirer');
 const open = require('open');
 const _ = require('lodash');
+const { stateManager } = require('amplify-cli-core');
 const { getAuthResourceName } = require('../../utils/getAuthResourceName');
 const { copyCfnTemplate, saveResourceParameters } = require('./utils/synthesize-resources');
 const { ENV_SPECIFIC_PARAMS, privateKeys } = require('./constants');
 const { getAddAuthHandler, getUpdateAuthHandler } = require('./handlers/resource-handlers');
 const { supportedServices } = require('../supported-services');
+const { importResource, createFullOutputFromPartialOutput } = require('./import');
 
-function serviceQuestions(context, defaultValuesFilename, stringMapFilename, serviceWalkthroughFilename, serviceMetadata) {
+function serviceQuestions(context, defaultValuesFilename, stringMapsFilename, serviceWalkthroughFilename, serviceMetadata) {
   const serviceWalkthroughSrc = `${__dirname}/service-walkthroughs/${serviceWalkthroughFilename}`;
   const { serviceWalkthrough } = require(serviceWalkthroughSrc);
-  return serviceWalkthrough(context, defaultValuesFilename, stringMapFilename, serviceMetadata);
+  return serviceWalkthrough(context, defaultValuesFilename, stringMapsFilename, serviceMetadata);
 }
 
 async function addResource(context, service) {
   const serviceMetadata = supportedServices[service];
-  const { defaultValuesFilename, stringMapFilename, serviceWalkthroughFilename } = serviceMetadata;
+  const { defaultValuesFilename, stringMapsFilename, serviceWalkthroughFilename } = serviceMetadata;
   return getAddAuthHandler(context)(
-    await serviceQuestions(context, defaultValuesFilename, stringMapFilename, serviceWalkthroughFilename, serviceMetadata),
+    await serviceQuestions(context, defaultValuesFilename, stringMapsFilename, serviceWalkthroughFilename, serviceMetadata),
   );
 }
 
 async function updateResource(context, { service }) {
   const serviceMetadata = supportedServices[service];
-  const { defaultValuesFilename, stringMapFilename, serviceWalkthroughFilename } = serviceMetadata;
+  const { defaultValuesFilename, stringMapsFilename, serviceWalkthroughFilename } = serviceMetadata;
   return getUpdateAuthHandler(context)(
-    await serviceQuestions(context, defaultValuesFilename, stringMapFilename, serviceWalkthroughFilename, serviceMetadata),
+    await serviceQuestions(context, defaultValuesFilename, stringMapsFilename, serviceWalkthroughFilename, serviceMetadata),
   );
 }
 
 async function updateConfigOnEnvInit(context, category, service) {
   const srvcMetaData = supportedServices.Cognito;
-  const { defaultValuesFilename, stringMapFilename, serviceWalkthroughFilename, provider } = srvcMetaData;
+  const { defaultValuesFilename, stringMapsFilename, serviceWalkthroughFilename, provider } = srvcMetaData;
 
   const providerPlugin = context.amplify.getPluginInstance(context, provider);
   // previously selected answers
   const resourceParams = providerPlugin.loadResourceParameters(context, 'auth', service);
   // ask only env specific questions
   let currentEnvSpecificValues = context.amplify.loadEnvResourceParameters(context, category, service);
+
+  const resource = _.get(context.exeInfo, ['amplifyMeta', category, service]);
+
+  if (resource && resource.serviceType === 'imported') {
+    const { succeeded, output, hostedUIProviderMeta } = await createFullOutputFromPartialOutput(
+      context,
+      service,
+      resource,
+      provider,
+      providerPlugin,
+    );
+
+    if (!succeeded) {
+      throw new Error('There was an error importing the previously configured auth configuration to the new environment.');
+    }
+
+    resource.output = output;
+
+    // If the imported resource was synced up to the cloud before, copy over the timestamp since frontend generation
+    // and other pieces of the CLI could rely on the presence of a value, if no timestamp was found for the same
+    // resource, then do nothing as push will assign one.
+    const currentMeta = stateManager.getCurrentMeta(undefined, {
+      throwIfNotExist: false,
+    });
+
+    if (currentMeta) {
+      const cloudTimestamp = _.get(currentMeta, [category, service, 'lastPushTimeStamp'], undefined);
+
+      if (cloudTimestamp) {
+        resource.lastPushTimeStamp = cloudTimestamp;
+      } else {
+        resource.lastPushTimeStamp = new Date();
+      }
+    }
+
+    stateManager.setMeta(undefined, context.exeInfo.amplifyMeta);
+
+    const envParams = {
+      hostedUIProviderMeta,
+    };
+
+    return envParams;
+  }
 
   // legacy headless mode (only supports init)
   if (isInHeadlessMode(context)) {
@@ -76,24 +121,28 @@ async function updateConfigOnEnvInit(context, category, service) {
   srvcMetaData.inputs = srvcMetaData.inputs.filter(
     input => ENV_SPECIFIC_PARAMS.includes(input.key) && !Object.keys(currentEnvSpecificValues).includes(input.key),
   );
+
   const serviceWalkthroughSrc = `${__dirname}/service-walkthroughs/${serviceWalkthroughFilename}`;
   const { serviceWalkthrough } = require(serviceWalkthroughSrc);
 
   // interactive mode
-  const result = await serviceWalkthrough(context, defaultValuesFilename, stringMapFilename, srvcMetaData, resourceParams);
+  const result = await serviceWalkthrough(context, defaultValuesFilename, stringMapsFilename, srvcMetaData, resourceParams);
   let envParams = {};
+
   if (resourceParams.hostedUIProviderMeta) {
     envParams = formatCredsforEnvParams(currentEnvSpecificValues, result, resourceParams);
   }
+
   ENV_SPECIFIC_PARAMS.forEach(paramName => {
     if (paramName in result && paramName !== 'hostedUIProviderCreds' && privateKeys.indexOf(paramName) === -1) {
       envParams[paramName] = result[paramName];
     }
   });
+
   return envParams;
 }
 
-export async function migrate(context) {
+async function migrate(context) {
   const category = 'auth';
   const { amplify } = context;
   const existingAuth = context.migrationInfo.amplifyMeta.auth || {};
@@ -114,97 +163,6 @@ export async function migrate(context) {
   });
   await copyCfnTemplate(context, category, props, cfnFilename);
   saveResourceParameters(context, provider, category, resourceName, { ...roles, ...props }, ENV_SPECIFIC_PARAMS);
-}
-
-export async function console(context, amplifyMeta) {
-  const cognitoOutput = getCognitoOutput(amplifyMeta);
-  if (cognitoOutput) {
-    const { Region } = amplifyMeta.providers.awscloudformation;
-    if (cognitoOutput.UserPoolId && cognitoOutput.IdentityPoolId) {
-      const answer = await inquirer.prompt({
-        name: 'selection',
-        type: 'list',
-        message: 'Which console',
-        choices: ['User Pool', 'Identity Pool', 'Both'],
-        default: 'Both',
-      });
-
-      switch (answer.selection) {
-        case 'User Pool':
-          await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
-          break;
-        case 'Identity Pool':
-          await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
-          break;
-        default:
-          await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
-          await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
-          break;
-      }
-    } else if (cognitoOutput.UserPoolId) {
-      await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
-    } else {
-      await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
-    }
-    context.print.info('');
-  } else {
-    context.print.error('Amazon Cognito resources have NOT been created for your project.');
-  }
-}
-
-export function getPermissionPolicies(context, service, resourceName, crudOptions) {
-  const serviceMetadata = require('../supported-services').supportedServices[service];
-  const { serviceWalkthroughFilename } = serviceMetadata;
-  const serviceWalkthroughSrc = `${__dirname}/service-walkthroughs/${serviceWalkthroughFilename}`;
-  const { getIAMPolicies } = require(serviceWalkthroughSrc);
-
-  if (!getPermissionPolicies) {
-    context.print.info(`No policies found for ${resourceName}`);
-    return;
-  }
-
-  return getIAMPolicies(resourceName, crudOptions);
-}
-
-function serviceQuestions(context, defaultValuesFilename, stringMapFilename, serviceWalkthroughFilename, serviceMetadata) {
-  const serviceWalkthroughSrc = `${__dirname}/service-walkthroughs/${serviceWalkthroughFilename}`;
-  const { serviceWalkthrough } = require(serviceWalkthroughSrc);
-  return serviceWalkthrough(context, defaultValuesFilename, stringMapFilename, serviceMetadata);
-}
-
-// may be able to consolidate this into just createUserPoolGroups
-async function updateUserPoolGroups(context, resourceName, userPoolGroupList) {
-  if (userPoolGroupList && userPoolGroupList.length > 0) {
-    const userPoolGroupPrecedenceList = [];
-
-    for (let i = 0; i < userPoolGroupList.length; i += 1) {
-      userPoolGroupPrecedenceList.push({
-        groupName: userPoolGroupList[i],
-        precedence: i + 1,
-      });
-    }
-
-    const userPoolGroupFile = path.join(
-      context.amplify.pathManager.getBackendDirPath(),
-      'auth',
-      'userPoolGroups',
-      'user-pool-group-precedence.json',
-    );
-
-    fs.outputFileSync(userPoolGroupFile, JSON.stringify(userPoolGroupPrecedenceList, null, 4));
-
-    context.amplify.updateamplifyMetaAfterResourceUpdate('auth', 'userPoolGroups', {
-      service: 'Cognito-UserPool-Groups',
-      providerPlugin: 'awscloudformation',
-      dependsOn: [
-        {
-          category: 'auth',
-          resourceName,
-          attributes: ['UserPoolId', 'AppClientIDWeb', 'AppClientID', 'IdentityPoolId'],
-        },
-      ],
-    });
-  }
 }
 
 function isInHeadlessMode(context) {
@@ -305,6 +263,42 @@ function getRequiredParamsForHeadlessInit(projectType, previousValues) {
   return requiredParams;
 }
 
+async function console(context, amplifyMeta) {
+  const cognitoOutput = getCognitoOutput(amplifyMeta);
+  if (cognitoOutput) {
+    const { Region } = amplifyMeta.providers.awscloudformation;
+    if (cognitoOutput.UserPoolId && cognitoOutput.IdentityPoolId) {
+      const answer = await inquirer.prompt({
+        name: 'selection',
+        type: 'list',
+        message: 'Which console',
+        choices: ['User Pool', 'Identity Pool', 'Both'],
+        default: 'Both',
+      });
+
+      switch (answer.selection) {
+        case 'User Pool':
+          await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
+          break;
+        case 'Identity Pool':
+          await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
+          break;
+        default:
+          await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
+          await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
+          break;
+      }
+    } else if (cognitoOutput.UserPoolId) {
+      await openUserPoolConsole(context, Region, cognitoOutput.UserPoolId);
+    } else {
+      await openIdentityPoolConsole(context, Region, cognitoOutput.IdentityPoolId);
+    }
+    context.print.info('');
+  } else {
+    context.print.error('Amazon Cognito resources have NOT been created for your project.');
+  }
+}
+
 function getCognitoOutput(amplifyMeta) {
   let cognitoOutput;
   const categoryMeta = amplifyMeta.auth;
@@ -343,7 +337,7 @@ function getPermissionPolicies(context, service, resourceName, crudOptions) {
     return;
   }
 
-  return getIAMPolicies(resourceName, crudOptions);
+  return getIAMPolicies(context, resourceName, crudOptions);
 }
 
 module.exports = {
@@ -353,4 +347,5 @@ module.exports = {
   migrate,
   console,
   getPermissionPolicies,
+  importResource,
 };

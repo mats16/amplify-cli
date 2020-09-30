@@ -71,11 +71,11 @@ export const getPostUpdateAuthMetaUpdater = (context: any) => async (resourceNam
   if (authParameters.triggers) {
     const triggers = JSON.parse(authParameters.triggers);
     customAuthConfigured =
-      triggers.DefineAuthChallenge &&
+      !!triggers.DefineAuthChallenge &&
       triggers.DefineAuthChallenge.length > 0 &&
-      triggers.CreateAuthChallenge &&
+      !!triggers.CreateAuthChallenge &&
       triggers.CreateAuthChallenge.length > 0 &&
-      triggers.VerifyAuthChallengeResponse &&
+      !!triggers.VerifyAuthChallengeResponse &&
       triggers.VerifyAuthChallengeResponse.length > 0;
   }
   context.amplify.updateamplifyMetaAfterResourceUpdate('auth', resourceName, 'customAuth', customAuthConfigured);

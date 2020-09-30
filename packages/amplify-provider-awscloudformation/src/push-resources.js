@@ -30,7 +30,7 @@ const parametersJson = 'parameters.json';
 
 async function run(context, resourceDefinition) {
   try {
-    const { resourcesToBeCreated, resourcesToBeUpdated, resourcesToBeDeleted, allResources } = resourceDefinition;
+    const { resourcesToBeCreated, resourcesToBeUpdated, resourcesToBeSynced, resourcesToBeDeleted, allResources } = resourceDefinition;
     const {
       parameters: { options },
     } = context;
@@ -60,7 +60,8 @@ async function run(context, resourceDefinition) {
 
     projectDetails = context.amplify.getProjectDetails();
 
-    if (resources.length > 0 || resourcesToBeDeleted.length > 0) {
+    // We do not need CloudFormation update if only syncable resources are the changes.
+    if (resourcesToBeCreated.length > 0 || resourcesToBeUpdated.length > 0 || resourcesToBeDeleted.length > 0) {
       await updateCloudFormationNestedStack(context, formNestedStack(context, projectDetails), resourcesToBeCreated, resourcesToBeUpdated);
     }
 
@@ -69,6 +70,21 @@ async function run(context, resourceDefinition) {
 
     if (resources.length > 0) {
       await context.amplify.updateamplifyMetaAfterPush(resources);
+    }
+
+    if (resourcesToBeSynced.length > 0) {
+      const linkResources = resourcesToBeSynced.filter(r => r.sync === 'link');
+      const unlinkedResources = resourcesToBeSynced.filter(r => r.sync === 'unlink');
+
+      if (linkResources.length > 0) {
+        await context.amplify.updateamplifyMetaAfterPush(linkResources);
+      }
+
+      if (unlinkedResources.length > 0) {
+        for (let i = 0; i < unlinkedResources.length; i++) {
+          context.amplify.updateamplifyMetaAfterResourceDelete(unlinkedResources[i].category, unlinkedResources[i].resourceName);
+        }
+      }
     }
 
     for (let i = 0; i < resourcesToBeDeleted.length; i++) {
@@ -446,10 +462,38 @@ function formNestedStack(context, projectDetails, categoryName, resourceName, se
         if (dependsOn) {
           for (let i = 0; i < dependsOn.length; i += 1) {
             for (let j = 0; j < dependsOn[i].attributes.length; j += 1) {
-              const parameterKey = dependsOn[i].category + dependsOn[i].resourceName + dependsOn[i].attributes[j];
+              // If the depends on resource is an imported resource we cannot form GetAtt type reference
+              // since there is no such thing. We have to read the output.{AttributeName} from the meta
+              // and inject the value ifself into the parameters block
+              let parameterValue;
+
+              const dependentResource = _.get(amplifyMeta, [dependsOn[i].category, dependsOn[i].resourceName], undefined);
+
+              if (!dependentResource) {
+                throw new Error(`Cannot get resource: ${dependsOn[i].resourceName} from '${dependsOn[i].category}' category.`);
+              }
+
+              if (dependentResource.serviceType === 'imported') {
+                const outputAttributeValue = _.get(dependentResource, ['output', dependsOn[i].attributes[j]], undefined);
+
+                if (!outputAttributeValue) {
+                  const error = new Error(
+                    `Cannot read the '${dependsOn[i].attributes[j]}' dependent attribute value from the output section of resource: '${dependsOn[i].resourceName}'.`,
+                  );
+                  error.stack = undefined;
+
+                  throw error;
+                }
+
+                parameterValue = outputAttributeValue;
+              } else {
+                parameterValue = { 'Fn::GetAtt': [dependsOnStackName, `Outputs.${dependsOn[i].attributes[j]}`] };
+              }
+
+              const parameterKey = `${dependsOn[i].category}${dependsOn[i].resourceName}${dependsOn[i].attributes[j]}`;
               const dependsOnStackName = dependsOn[i].category + dependsOn[i].resourceName;
 
-              parameters[parameterKey] = { 'Fn::GetAtt': [dependsOnStackName, `Outputs.${dependsOn[i].attributes[j]}`] };
+              parameters[parameterKey] = parameterValue;
             }
 
             if (dependsOn[i].exports) {

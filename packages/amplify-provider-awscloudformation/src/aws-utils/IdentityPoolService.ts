@@ -1,9 +1,9 @@
 import { $TSAny, $TSContext } from 'amplify-cli-core';
 import { IIdentityPoolService } from 'amplify-util-import';
 import { CognitoIdentity } from 'aws-sdk';
-import { IdentityPool, IdentityPoolShortDescription, ListIdentityPoolsResponse } from 'aws-sdk/clients/cognitoidentity';
+import { PaginationKey, IdentityPool, IdentityPoolShortDescription, ListIdentityPoolsResponse } from 'aws-sdk/clients/cognitoidentity';
 import configurationManager from '../configuration-manager';
-import { pagedAWSCall } from './aws-utils';
+import { pagedAWSCall } from './paged-call';
 
 export const createIdentityPoolService = async (context: $TSContext, options: $TSAny): Promise<IdentityPoolService> => {
   let credentials = {};
@@ -27,12 +27,20 @@ export class IdentityPoolService implements IIdentityPoolService {
 
   public async listIdentityPools(): Promise<IdentityPoolShortDescription[]> {
     if (this.cachedIdentityPoolIds.length === 0) {
-      const result = await pagedAWSCall<ListIdentityPoolsResponse, IdentityPoolShortDescription>(
-        this.cognitoIdentity.listIdentityPools.bind(this.cognitoIdentity),
+      const result = await pagedAWSCall<ListIdentityPoolsResponse, IdentityPoolShortDescription, PaginationKey>(
+        async (params: CognitoIdentity.Types.ListIdentitiesInput, nextToken: PaginationKey) => {
+          return await this.cognitoIdentity
+            .listIdentityPools({
+              ...params,
+              NextToken: nextToken,
+            })
+            .promise();
+        },
         {
           MaxResults: 60,
         },
-        (response: ListIdentityPoolsResponse) => response.IdentityPools,
+        response => response?.IdentityPools,
+        async response => response?.NextToken,
       );
 
       this.cachedIdentityPoolIds.push(...result);

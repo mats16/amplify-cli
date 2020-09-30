@@ -1,4 +1,5 @@
 import {
+  GetUserPoolMfaConfigResponse,
   IdentityProviderType,
   UserPoolDescriptionType,
   UserPoolType,
@@ -10,4 +11,5 @@ export interface ICognitoUserPoolService {
   getUserPoolDetails(userPoolId: string): Promise<UserPoolType>;
   listUserPoolClients(userPoolId: string): Promise<UserPoolClientType[]>;
   listUserPoolIdentityProviders(userPoolId: string): Promise<IdentityProviderType[]>;
+  getUserPoolMfaConfig(userPoolId: string): Promise<GetUserPoolMfaConfigResponse>;
 }
